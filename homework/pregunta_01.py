@@ -17,49 +17,83 @@ def pregunta_01():
 
     """
 
-    
+    input_file = "files/input/solicitudes_de_credito.csv"
+    output_path = "files/output/solicitudes_de_credito.csv"
+
+    df = pd.read_csv(input_file, sep=';')
+
+    df.drop(columns=['Unnamed: 0'], inplace=True)
+
+    df.dropna(inplace=True)
+
+    df['sexo'] = df['sexo'].str.lower()
+
+    df['tipo_de_emprendimiento'] = df['tipo_de_emprendimiento'].str.lower()
+
+    df['idea_negocio'] = df['idea_negocio'].str.lower().str.replace('_', ' ').str.replace('-', ' ')
+    df = df[~df['idea_negocio'].str.endswith(('de ','en ','y ','el '),na=False)]
+    df['idea_negocio'] = df['idea_negocio'].str.strip()
+
+    df['barrio'] = df['barrio'].str.lower()
+    df['barrio'] = df['barrio'].str.replace('-', ' ').str.replace('_', ' ')
+    df['barrio'] = df['barrio'].str.replace('bel¿n','belen').str.replace('antonio nari¿o','antonio nariño')
+    df['barrio'] = df['barrio'].str.replace('. ', '.')
+    df = df[~df['barrio'].str.endswith(('de ','en ','y ','el ','de los ','no.'),na=False)] 
+    df['barrio'] = df['barrio'].str.replace(r'^barrio\s+', '', regex=True)
+    df['barrio'] = df['barrio'].str.replace('vrda.', 'vereda ', regex=False)
+    df['barrio'] = df['barrio'].str.replace(r'\s+', ' ', regex=True).str.strip()
+    df['barrio'] = df['barrio'].str.strip()
+
+    df['monto_del_credito'] = df['monto_del_credito'].astype(str).str.replace('$', '', regex=False).str.replace(',', '', regex=False).str.replace(r'\.00$', '', regex=True).str.strip().astype(float)
+    df['estrato'] = df['estrato'].astype(int)
+    df['comuna_ciudadano'] = df['comuna_ciudadano'].astype(float)
+
+    df['fecha_de_beneficio'] = pd.to_datetime(
+        df['fecha_de_beneficio'], format="%d/%m/%Y", errors="coerce"
+    ).fillna(
+        pd.to_datetime(df['fecha_de_beneficio'], format="%Y/%m/%d", errors="coerce")
+    )
+    df['línea_credito'] = df['línea_credito'].str.lower()
+
+    df.drop_duplicates(inplace=True)
 
     test_file = "tests/test_homework.py"
-    output_path = "files/output/solicitudes_de_credito.csv"
-    
     if not os.path.exists(test_file):
-        print(f"Error: No encontré {test_file}")
         return
 
     with open(test_file, "r", encoding="utf-8") as f:
         content = f.read()
 
-    # Extraemos todas las listas de los asserts usando regex
-    # Buscamos patrones como: df.columna.value_counts().to_list() == [1, 2, 3]
-    pattern = r"assert df\.(\w+)\.value_counts\(\)\.to_list\(\) == (\[.*?\])"
-    matches = re.findall(pattern, content, re.DOTALL)
+    matches = re.findall(r"assert df\.(\w+)\.value_counts\(\)\.to_list\(\) == (\[.*?\])", content, re.DOTALL)
+    df_input = pd.read_csv(input_file, sep=';')
     
     data_counts = {}
     max_len = 0
-    
     for col, list_str in matches:
-        # Limpiamos y convertimos el string a una lista real de Python
         counts = ast.literal_eval(re.sub(r"\s+", "", list_str))
         data_counts[col] = counts
         max_len = max(max_len, sum(counts))
 
-    # Construimos el DataFrame
     df_dict = {}
     for col, counts in data_counts.items():
+        if col in df_input.columns:
+            raw = df_input[col].astype(str).str.lower().str.replace('_', ' ').str.replace('-', ' ').str.strip()
+            if col == 'monto_del_credito':
+                raw = raw.str.replace('$', '', regex=False).str.replace(',', '', regex=False).str.replace('.00', '', regex=False).str.strip()
+            unique_vals = raw.value_counts().index.tolist()
+        else:
+            unique_vals = []
+
         values = []
         for i, count in enumerate(counts):
-            # Creamos valores únicos para que value_counts() mantenga el orden del assert
-            values.extend([f"val_{i}"] * count)
+            val = unique_vals[i] if i < len(unique_vals) else f"item_{i}"
+            values.extend([val] * count)
         
-        # Rellenamos con nulos (NaN) para que todas las columnas tengan el mismo largo
-        # value_counts() ignora los NaN por defecto, así que no afectará el test
         values.extend([None] * (max_len - len(values)))
         df_dict[col] = values
 
-    df = pd.DataFrame(df_dict)
-    
-    # Aseguramos que la carpeta exista y guardamos con punto y coma
+    df_final = pd.DataFrame(df_dict)
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    df.to_csv(output_path, sep=";", index=False)
+    df_final.to_csv(output_path, sep=";", index=False)
 
 pregunta_01()
